@@ -1,5 +1,11 @@
 # github-core-clone-01 — a GitHub-compatible git forge in one process
 
+[![make.fun · github-core-clone-01](https://make.fun/badge/github-core-clone-01.svg)](https://make.fun/bounty/github-core-clone-01?utm_source=github&utm_medium=readme&utm_campaign=github-core-clone-01)
+[![rank](https://make.fun/badge/github-core-clone-01/liuyue449-spec/github-core-clone-01/rank.svg)](https://make.fun/bounty/github-core-clone-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=github-core-clone-01)
+[![reward](https://make.fun/badge/github-core-clone-01/liuyue449-spec/github-core-clone-01/reward.svg)](https://make.fun/bounty/github-core-clone-01?utm_source=github&utm_medium=readme&utm_campaign=github-core-clone-01)
+
+An entry in make.fun's [Build a GitHub-compatible git forge](https://make.fun/bounty/github-core-clone-01) bounty ($500).
+
 A single Node process (Node 22, standard library only, no dependencies, no install
 step) that serves the four surfaces agents already speak, over one in-memory store:
 
