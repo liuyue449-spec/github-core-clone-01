@@ -34,7 +34,7 @@ TypeScript types on its own. There is nothing to install: the program imports
 `node:http` and its own modules only, and the trial has no package manager and
 no internet.
 
-## The lifecycle (main.ts, kept as the starter wrote it)
+## The lifecycle (main.ts)
 
 The env is a server the harness starts beside yours; its origin is in
 `MAKEFUN_ENV_URL` (`http://store:8080` in a trial).
