@@ -55,20 +55,13 @@ function sendNoBody(res: ServerResponse, status: number): void {
   res.end();
 }
 
-function pathOf(req: IncomingMessage): string {
-  try {
-    return new URL(req.url ?? '/', 'http://entry').pathname;
-  } catch {
-    return '/';
-  }
-}
-
-function queryOf(req: IncomingMessage): Record<string, string> {
+/** Parse the request URL once: the pathname routes, the search feeds the query record. */
+function parseRequestUrl(req: IncomingMessage): { path: string; search: string } {
   try {
     const url = new URL(req.url ?? '/', 'http://entry');
-    return parseQuery(url.search);
+    return { path: url.pathname, search: url.search };
   } catch {
-    return {};
+    return { path: '/', search: '' };
   }
 }
 
@@ -95,7 +88,7 @@ export function createApp(): Server {
   const store = new Store();
   return createServer((req: IncomingMessage, res: ServerResponse) => {
     void (async () => {
-      const path = pathOf(req);
+      const { path, search } = parseRequestUrl(req);
       const method = req.method ?? 'GET';
       try {
         // The env's boot check calls this twice: 200 {"ok":true}. Public.
@@ -167,7 +160,7 @@ export function createApp(): Server {
           }
           const host = req.headers.host ?? '127.0.0.1';
           const absoluteBase = `http://${host}`;
-          const reply = handleRest(store, method, path, queryOf(req), parsed, absoluteBase);
+          const reply = handleRest(store, method, path, parseQuery(search), parsed, absoluteBase);
           if (reply.noBody) {
             sendNoBody(res, reply.status);
             return;
@@ -187,7 +180,7 @@ export function createApp(): Server {
             return;
           }
           if (service === 'info/refs' && method === 'GET') {
-            const query = queryOf(req);
+            const query = parseQuery(search);
             const serviceName = query.service;
             if (serviceName !== 'git-upload-pack' && serviceName !== 'git-receive-pack') {
               sendJson(res, 400, { message: 'Missing or invalid service parameter' });

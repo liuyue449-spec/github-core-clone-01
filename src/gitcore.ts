@@ -189,10 +189,26 @@ function peelToCommitFromLookup(lookup: ObjectLookup, oid: string): string {
   return current;
 }
 
-/** Whether `ancestor` is `tip` or one of its ancestors. */
+/**
+ * Whether `ancestor` is `tip` or one of its ancestors. Walks from the tip and stops
+ * the moment the (peeled) ancestor is reached, so a fast-forward check on a direct
+ * child costs one step instead of a full walk of the history; the walk only runs to
+ * exhaustion when the answer is no.
+ */
 export function isAncestor(lookup: ObjectLookup, ancestor: string, tip: string): boolean {
-  if (ancestor === tip) return true;
-  return commitAncestors(lookup, tip).has(peelToCommitFromLookup(lookup, ancestor));
+  const target = peelToCommitFromLookup(lookup, ancestor);
+  const seen = new Set<string>();
+  const queue: string[] = [peelToCommitFromLookup(lookup, tip)];
+  while (queue.length > 0) {
+    const oid = queue.pop()!;
+    if (oid === target) return true;
+    if (seen.has(oid)) continue;
+    seen.add(oid);
+    const obj = lookup(oid);
+    if (!obj || obj.type !== 'commit') continue;
+    for (const parent of parseCommit(obj.data).parents) queue.push(parent);
+  }
+  return false;
 }
 
 /** The merge-base of two commits: the first common ancestor found walking from `a`. */
@@ -511,8 +527,7 @@ export function readPack(pack: Buffer): Map<string, GitObject> {
       baseOid = pack.subarray(offset, offset + 20).toString('hex');
       offset += 20;
     }
-    const end = entryEndOffset(pack, offset, size);
-    const inflated = inflateSync(pack.subarray(offset, end));
+    const { data: inflated, end } = inflateEntry(pack, offset, size);
     offset = end;
     entries.push({ offset: entryOffset, type, data: inflated, baseOffset, baseOid });
   }
@@ -538,6 +553,47 @@ export function readPack(pack: Buffer): Map<string, GitObject> {
     objects.set(hashObject(obj.type, obj.data), obj);
   }
   return objects;
+}
+
+/** Adler-32 of a buffer, the checksum every zlib stream carries big-endian at its tail. */
+function adler32(data: Buffer): number {
+  let a = 1;
+  let b = 0;
+  for (let i = 0; i < data.length; i += 1) {
+    a = (a + data[i]!) % 65521;
+    b = (b + a) % 65521;
+  }
+  return ((b << 16) | a) >>> 0;
+}
+
+/**
+ * Inflate the pack entry starting at `start` and find where its zlib stream ends.
+ * One full inflate gives the data; the stream's end is then located by scanning for the
+ * data's Adler-32 trailer and verifying the first candidate that inflates cleanly (a
+ * prefix inflates only when it ends exactly at the stream's end, since zlib verifies
+ * the trailer). That is a constant number of inflations per entry, where the probing
+ * search in entryEndOffset needs a logarithmic number of them; the search stays as the
+ * fallback for a stream whose trailer scan finds no verifying candidate.
+ */
+function inflateEntry(pack: Buffer, start: number, expectedSize: number): { data: Buffer; end: number } {
+  const limit = pack.length - 20; // the 20-byte trailer; entries never overlap it
+  const data = inflateSync(pack.subarray(start, limit));
+  if (data.length !== expectedSize) throw new Error('pack entry size mismatch');
+  const trailer = Buffer.alloc(4);
+  trailer.writeUInt32BE(adler32(data), 0);
+  let searchFrom = start + 2; // skip the 2-byte zlib header; the trailer follows the deflate body
+  for (;;) {
+    const at = pack.indexOf(trailer, searchFrom);
+    if (at < 0 || at + 4 > limit) break;
+    const end = at + 4;
+    try {
+      if (inflateSync(pack.subarray(start, end)).length === expectedSize) return { data, end };
+    } catch {
+      // Not the stream's end: keep scanning.
+    }
+    searchFrom = at + 1;
+  }
+  return { data, end: entryEndOffset(pack, start, expectedSize) };
 }
 
 // Find where a zlib stream starting at `start` ends. Node's inflateSync ignores trailing
